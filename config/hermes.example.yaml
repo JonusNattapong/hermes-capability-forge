@@ -1,0 +1,21 @@
+# Merge these sections into ~/.hermes/config.yaml after cloning the repository.
+# Set CAPABILITY_FORGE_HOME to the absolute path of your clone first.
+
+skills:
+  # New skill_manage(create) writes land in this Git-tracked repository.
+  create_dir: ${CAPABILITY_FORGE_HOME}/skills
+  guard_agent_created: true
+  write_approval: true
+
+plugins:
+  enabled:
+    - capability-observer
+
+curator:
+  enabled: true
+  interval_hours: 168
+  min_idle_hours: 2
+  stale_after_days: 30
+  archive_after_days: 90
+  consolidate: false
+  prune_builtins: false

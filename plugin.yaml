@@ -1,0 +1,6 @@
+name: capability-observer
+version: 0.1.0
+description: Privacy-preserving capability telemetry for Hermes real-work dogfooding
+provides_hooks:
+  - post_tool_call
+author: JonusNattapong
