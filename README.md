@@ -4,17 +4,18 @@ Continuous capability engineering for [NousResearch/hermes-agent](https://github
 
 Capability Forge improves Hermes from real work instead of maximizing tool count. It observes repeated friction, performs bounded research, chooses the smallest useful extension surface, verifies the change, dogfoods it, and promotes it only when evidence passes explicit gates.
 
-## V0.3
+## V0.4
 
-V0.3 closes the loop from **observe** to **verified, reversible improvement**:
+V0.4 turns verified repair into **isolated capability experimentation**:
 
 1. **`capability-forge` Skill** — decides whether to reuse, patch, or build a Skill, helper script, Plugin/Tool, or MCP.
 2. **`capability-observer` Plugin** — records privacy-preserving operational telemetry from `post_tool_call`.
 3. **`capability-maintainer` Skill / Blueprint** — weekly proposal-first maintenance from real evidence.
-4. **Ownership Registry** — maps tool failures to an explicit owning capability without guessing.
+4. **Ownership + Dependency Registry** — maps tool failures to explicit owners and explicit capability dependencies without guessing.
 5. **Eval + Promotion Gate** — capability-specific thresholds must pass before promotion.
 6. **Baseline + Drift Guard** — compares current evidence with a trusted passing baseline.
 7. **Guarded Patch + Rollback** — optional exact-text repair inside explicit allowlisted roots with SHA-256 concurrency checks and backups.
+8. **Experiment Runner** — creates isolated Git branches/worktrees, runs deterministic checks, records privacy-preserving dogfood outcome, decides `PROMOTE / MORE_EVIDENCE / ROLLBACK`, snapshots promoted changes, and cleans up without merging or pushing.
 
 Hermes Curator remains responsible for its own skill lifecycle. Capability Forge adds cross-surface evidence and does not replace Curator or Hermes core.
 
@@ -24,53 +25,49 @@ Hermes Curator remains responsible for its own skill lifecycle. Capability Forge
                         NORMAL HERMES WORK
                                |
                                v
-                      Capability Forge
-                               |
-                reuse / skill / plugin / MCP
-                               |
-                               v
-                         Verify + Dogfood
-                               |
-                               v
                       Capability Observer
                                |
-                               v
-                    events.jsonl + usage
-                               |
+                     telemetry + usage
                                v
                     capability_forge_report
                                |
-                    explicit ownership map
-                               |
+              owner + dependency attribution
                                v
                     Capability Maintainer
                          (weekly opt-in)
                                |
-                KEEP / PATCH / INVESTIGATE /
-                       RETIRE proposals
-                               |
-                       approved foreground work
-                               |
-                +--------------+--------------+
-                |                             |
-                v                             v
-       capability_forge_gate          guarded patch preview
-                |                             |
-        PASS + no regression              opt-in apply
-                |                             |
-                +--------------+--------------+
+                    evidence-backed proposal
                                v
-                          test + dogfood
+                      Capability Forge
                                |
+                     bounded research
                                v
-                    gate + baseline update
+                 capability_forge_experiment
+                               |
+                  Git branch + worktree
+                               |
+                       guarded patch
+                               v
+                  deterministic eval checks
+                               |
+                         real dogfood
+                               v
+                    PROMOTE / MORE_EVIDENCE
+                         / ROLLBACK
+                     /             \
+                    v               v
+              snapshot commit    delete branch
+                    |
+                    v
+             human review / merge
 ```
 
 Core loop:
 
 ```text
-OBSERVE -> RESEARCH -> DECIDE -> BUILD -> VERIFY -> DOGFOOD
-        -> MAP OWNER -> EVAL -> COMPARE -> PROMOTE / ROLLBACK
+OBSERVE -> MAP OWNER/DEPENDENCIES -> RESEARCH -> DECIDE -> EXPERIMENT
+        -> ISOLATED EVAL -> DOGFOOD -> PROMOTE / MORE_EVIDENCE / ROLLBACK
+        -> SNAPSHOT -> HUMAN REVIEW
 ```
 
 ## Decision rule
@@ -99,11 +96,12 @@ Requires a current Hermes Agent release with plugin hooks, plugin tools, Skills 
 hermes plugins install JonusNattapong/hermes-capability-forge --enable
 ```
 
-The plugin registers one hook and three tools:
+The plugin registers one hook and four tools:
 
 - `capability_forge_report`
 - `capability_forge_gate`
 - `capability_forge_patch`
+- `capability_forge_experiment`
 
 ### 2. Install the Forge skill
 
@@ -213,7 +211,8 @@ Example:
       "source": "JonusNattapong/repo-inspector",
       "tools": ["repo_scan", "repo_dependency_graph"],
       "tool_prefixes": [],
-      "skills": ["repo-inspector"]
+      "skills": ["repo-inspector"],
+      "depends_on": ["codegraph-mcp"]
     }
   ]
 }
@@ -224,6 +223,8 @@ Rules:
 - exact tool ownership wins
 - a narrow prefix may be used when a capability owns a stable namespace
 - ambiguous matches are unresolved
+- `depends_on` edges are explicit; unresolved dependencies remain visible rather than guessed
+- reports expose `dependency_edges` so failures can be traced through known capability boundaries
 - no LLM ownership guessing
 
 ## Tool: `capability_forge_gate`
@@ -258,7 +259,14 @@ Copy [`data/evals.example.json`](data/evals.example.json) and define thresholds 
         "max_retry_rate_increase": 0.03,
         "max_p95_duration_ms_relative_increase": 0.50,
         "max_success_rate_drop": 0.05
-      }
+      },
+      "checks": [
+        {
+          "name": "unit-tests",
+          "argv": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+          "timeout_seconds": 120
+        }
+      ]
     }
   }
 }
@@ -343,6 +351,113 @@ evidence -> research -> eval plan -> patch preview
 
 Do not enable guarded patching on broad roots such as a home directory or filesystem root.
 
+## Tool: `capability_forge_experiment`
+
+V0.4 adds an isolated experiment lifecycle for repo-backed capability changes. The
+runner uses Git worktrees, matching the same isolation pattern used by current Hermes
+development tooling and bundled coding workflows. It never merges or pushes branches.
+
+Experiment mutation is disabled by default. Configure narrow repository roots and opt in:
+
+Linux/macOS:
+
+```bash
+export CAPABILITY_FORGE_EXPERIMENT_REPO_ROOTS=/srv/capabilities:/home/me/project
+export CAPABILITY_FORGE_ALLOW_EXPERIMENT=1
+```
+
+PowerShell:
+
+```powershell
+$env:CAPABILITY_FORGE_EXPERIMENT_REPO_ROOTS = "D:\Projects\capabilities;D:\Projects\myrepo"
+$env:CAPABILITY_FORGE_ALLOW_EXPERIMENT = "1"
+```
+
+State defaults to:
+
+```text
+~/.hermes/capability-lab/experiments/<experiment-id>/
+├── manifest.json
+└── worktree/
+```
+
+Lifecycle:
+
+```text
+create -> patch -> evaluate -> dogfood -> decide
+                                  |
+                   +--------------+--------------+
+                   |              |              |
+                PROMOTE      MORE_EVIDENCE    ROLLBACK
+                   |                             |
+                snapshot                      cleanup
+                   |                             |
+                cleanup                    delete branch
+                   |
+             review/merge later
+```
+
+### `create`
+
+- source path must be an allowlisted Git repository root
+- base ref is resolved to a commit using argument-safe Git calls, never shell interpolation
+- creates `forge/exp-<id>` plus an isolated worktree
+- returns prior experiments with the same capability + hypothesis hash to surface repeated failures
+
+### `patch`
+
+- writes only inside the generated worktree
+- requires current SHA-256
+- exact text must match once
+- preserves file permissions
+- adapts LF input to a CRLF worktree only when that adaptation produces exactly one match
+- source repo working branch is untouched
+
+### `evaluate`
+
+Experiment checks come from the capability's `evals.json` profile as explicit argv arrays:
+
+```json
+{
+  "checks": [
+    {
+      "name": "unit-tests",
+      "argv": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+      "timeout_seconds": 120
+    }
+  ]
+}
+```
+
+Checks execute with `shell=False` inside the worktree. Stdout/stderr are not persisted;
+only exit status, duration, captured byte counts, and SHA-256 hashes are recorded. Treat
+`evals.json` as trusted executable configuration.
+
+### `dogfood` and `decide`
+
+Dogfood records only the outcome (`better`, `same`, `worse`, `unclear`) plus a hash and
+byte count of the supplied evidence. Raw dogfood evidence is not persisted.
+
+Decision policy:
+
+- eval FAIL -> `ROLLBACK`
+- eval PASS but no/unclear dogfood -> `MORE_EVIDENCE`
+- eval PASS + worse dogfood -> `ROLLBACK`
+- eval PASS + better dogfood -> `PROMOTE`
+- eval PASS + same dogfood -> `MORE_EVIDENCE`
+
+### `snapshot` and `cleanup`
+
+A promoted experiment cannot be cleaned up until it is snapshotted. `snapshot` creates
+a local commit on the experiment branch using a dedicated local Forge identity and stages
+only paths recorded as Forge patches; untracked files or artifacts created by evals are not
+silently swept into the commit. Each patched file hash is revalidated immediately before
+snapshot. Cleanup then removes the worktree while preserving the branch for human review.
+A rollback branch may be deleted only if its tip still matches the experiment's expected
+commit, preventing a race from deleting unrelated later work.
+
+The runner never merges, pushes, or changes the source branch automatically.
+
 ## Curator coexistence
 
 Hermes Curator tracks skill usage and can manage the skills it considers agent-created. Current Hermes behavior distinguishes provenance: bundled/hub/manual/external skills do not all participate in telemetry or mutation the same way.
@@ -363,15 +478,15 @@ Do not stop after isolated tests:
 
 ```text
 research
-  -> build v0
-  -> isolated test
-  -> resume original task
-  -> use capability normally
-  -> observe evidence
-  -> targeted repair
-  -> run gate
-  -> compare baseline
-  -> keep or rollback
+  -> create isolated experiment
+  -> patch experiment worktree
+  -> deterministic eval
+  -> dogfood on representative real work
+  -> PROMOTE / MORE_EVIDENCE / ROLLBACK
+  -> snapshot promoted branch
+  -> human review / merge
+  -> observe live telemetry
+  -> run gate + compare baseline
 ```
 
 A capability worse than the previous workflow should be reverted or disabled.
@@ -424,12 +539,26 @@ python -m compileall -q .
 - [x] Scheduled maintainer remains non-mutating
 - [x] Integration and security tests
 
+### V0.4
+
+- [x] Isolated Git branch/worktree Experiment Runner
+- [x] Deterministic eval commands with `shell=False`
+- [x] Privacy-preserving eval output hashes
+- [x] Privacy-preserving dogfood evidence hashes
+- [x] `PROMOTE / MORE_EVIDENCE / ROLLBACK` decision policy
+- [x] Promotion snapshot commit before cleanup
+- [x] Prior-experiment memory by hypothesis hash
+- [x] Explicit capability dependency graph
+- [x] Safe branch deletion with expected-tip verification
+- [x] Windows CRLF-aware exact patching
+- [x] Real Git integration tests
+
 ### Explicitly not automatic
 
 - internet-wide dependency scanning
 - LLM ownership guessing
 - unattended scheduled patching
-- auto-merging or auto-deleting skills
+- auto-merging, auto-pushing, or auto-deleting skills/experiment branches
 - recording prompts/results for analytics
 - modifying Hermes core
 - trivial MCP wrappers for functionality existing tools already handle
@@ -438,7 +567,7 @@ python -m compileall -q .
 
 **Real work is the benchmark.**
 
-Research informs implementation. Tests establish a baseline. Dogfooding discovers reality. Ownership localizes the problem. Eval gates test whether a change deserves promotion. Baselines expose regressions. Reversible patches keep experimentation survivable.
+Research informs implementation. Tests establish a baseline. Dogfooding discovers reality. Ownership and dependency edges localize the problem. Eval gates test whether a change deserves promotion. Isolated worktrees make changes disposable. Baselines expose regressions. Snapshot-before-cleanup keeps successful experiments reviewable without granting the agent merge rights.
 
 ## License
 

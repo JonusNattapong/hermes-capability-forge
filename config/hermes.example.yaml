@@ -20,17 +20,26 @@ curator:
   consolidate: false
   prune_builtins: false
 
-# V0.3 runtime state lives under ~/.hermes/capability-lab/ by default:
-#   capabilities.json  explicit tool -> capability ownership
-#   evals.json         promotion thresholds
+# V0.4 runtime state lives under ~/.hermes/capability-lab/ by default:
+#   capabilities.json  explicit tool -> capability ownership + dependency edges
+#   evals.json         promotion thresholds + deterministic experiment checks
 #   baselines.json     trusted passing baselines
 #   patches/           reversible guarded-patch backups/manifests
+#   experiments/       isolated experiment manifests + Git worktrees
 #
 # Optional environment overrides:
 #   CAPABILITY_FORGE_REGISTRY=/path/to/capabilities.json
 #   CAPABILITY_FORGE_EVALS=/path/to/evals.json
 #   CAPABILITY_FORGE_BASELINES=/path/to/baselines.json
+#   CAPABILITY_FORGE_EXPERIMENT_HOME=/path/to/experiment-state
 #
 # Guarded patching is intentionally NOT enabled here. Configure it explicitly:
 #   CAPABILITY_FORGE_PATCH_ROOTS=/narrow/root1${PATH_SEPARATOR}/narrow/root2
 #   CAPABILITY_FORGE_ALLOW_PATCH=1   # foreground opt-in only
+#
+# Isolated experiment mutation is also opt-in and repo-scoped:
+#   CAPABILITY_FORGE_EXPERIMENT_REPO_ROOTS=/repo/root1${PATH_SEPARATOR}/repo/root2
+#   CAPABILITY_FORGE_ALLOW_EXPERIMENT=1
+#
+# Eval checks use argv arrays with shell=False. Treat evals.json as trusted executable
+# configuration and keep repo roots narrow. The runner never merges or pushes branches.

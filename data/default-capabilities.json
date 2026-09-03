@@ -8,12 +8,14 @@
       "tools": [
         "capability_forge_report",
         "capability_forge_gate",
-        "capability_forge_patch"
+        "capability_forge_patch",
+        "capability_forge_experiment"
       ],
       "skills": [
         "capability-forge",
         "capability-maintainer"
-      ]
+      ],
+      "depends_on": []
     }
   ]
 }

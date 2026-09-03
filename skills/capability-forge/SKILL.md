@@ -7,7 +7,7 @@ description: >
   MCP server. Research existing solutions lightly before building, prefer reuse
   and patching over creating new components, verify changes, dogfood them on the
   current real task, and preserve useful lessons for future runs.
-version: 0.3.0
+version: 0.4.0
 metadata:
   hermes:
     tags:
@@ -33,7 +33,7 @@ work easier.
 
 ## Core loop
 
-**OBSERVE -> RESEARCH -> DECIDE -> BUILD -> VERIFY -> DOGFOOD -> LEARN -> IMPROVE**
+**OBSERVE -> RESEARCH -> DECIDE -> EXPERIMENT -> VERIFY -> DOGFOOD -> PROMOTE / ROLLBACK -> LEARN**
 
 Do not interrupt ordinary work merely to invent infrastructure.
 
@@ -198,9 +198,9 @@ Prefer targeted patches. Do not encode one-off accidents as permanent rules.
 
 When a capability becomes reusable, add it to the explicit capability registry at
 `~/.hermes/capability-lab/capabilities.json` (or `CAPABILITY_FORGE_REGISTRY`).
-Record its stable id, kind, source, exact tool names or narrow tool prefixes, and
-related skills. Never guess ownership from a vague name when multiple components
-could match.
+Record its stable id, kind, source, exact tool names or narrow tool prefixes,
+related skills, and explicit `depends_on` capability ids. Never guess ownership
+from a vague name when multiple components could match.
 
 Create a capability-specific eval profile in
 `~/.hermes/capability-lab/evals.json` (or `CAPABILITY_FORGE_EVALS`) before treating
@@ -221,7 +221,39 @@ Before promoting a changed capability:
 
 Do not lower eval thresholds merely to make a failing change pass.
 
-## 12. Guarded repair
+## 12. Isolated capability experiments
+
+For a repo-backed capability change that is more than a trivial documentation fix,
+prefer `capability_forge_experiment` over mutating the working branch directly.
+
+The experiment runner uses an isolated Git branch + worktree. It is disabled unless
+`CAPABILITY_FORGE_EXPERIMENT_REPO_ROOTS` contains the source repository and
+`CAPABILITY_FORGE_ALLOW_EXPERIMENT=1` is explicitly set.
+
+Recommended lifecycle:
+
+1. `create` with the capability id, repo root, base ref, and a concrete hypothesis
+2. `patch` only files inside the generated worktree with SHA-256 + exact-one-match guards
+3. `evaluate` using deterministic `checks[].argv` from the capability eval profile
+4. use the experiment version on representative real work
+5. `dogfood` with outcome `better`, `same`, `worse`, or `unclear`; raw evidence text is hashed, not persisted
+6. `decide`
+7. if `PROMOTE`, call `snapshot` to create a durable local commit on the experiment branch
+8. `cleanup` the worktree; keep a promoted branch for review/merge, or delete a rollback branch
+
+Decision rules are conservative:
+
+- failed isolated eval -> `ROLLBACK`
+- passing eval without real dogfood -> `MORE_EVIDENCE`
+- passing eval + `worse` dogfood -> `ROLLBACK`
+- passing eval + `better` dogfood -> `PROMOTE`
+- `same` or `unclear` -> `MORE_EVIDENCE`
+
+The runner never merges, pushes, or modifies the source branch automatically. Before
+starting a similar hypothesis, inspect `prior_matching_experiments` so a previously
+failed experiment is not reinvented without new evidence.
+
+## 13. Guarded repair
 
 `capability_forge_patch` is optional and must remain disabled unless the user has
 explicitly configured `CAPABILITY_FORGE_PATCH_ROOTS` and set
@@ -239,7 +271,7 @@ Use it only for a narrow exact-text repair after evidence and an eval plan exist
 
 Scheduled maintainer runs must stay proposal-first and must not apply patches.
 
-## 13. Maintenance and retirement
+## 14. Maintenance and retirement
 
 Periodically review active capabilities for upstream changes, recurring failures,
 broken references, usage, overlap, and baseline drift. Research maintenance changes

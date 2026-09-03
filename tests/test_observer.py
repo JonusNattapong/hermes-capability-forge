@@ -53,7 +53,12 @@ class CapabilityObserverTests(unittest.TestCase):
         self.assertIn("post_tool_call", ctx.hooks)
         self.assertEqual(
             set(ctx.tools),
-            {"capability_forge_report", "capability_forge_gate", "capability_forge_patch"},
+            {
+                "capability_forge_report",
+                "capability_forge_gate",
+                "capability_forge_patch",
+                "capability_forge_experiment",
+            },
         )
         self.assertTrue(all(tool["toolset"] == "capability_forge" for tool in ctx.tools.values()))
 

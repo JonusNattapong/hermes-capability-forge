@@ -63,6 +63,11 @@ def load_registry(path: Path | None = None) -> dict[str, dict[str, Any]]:
                 for value in item.get("skills", [])
                 if isinstance(value, str) and value.strip()
             ][:128]
+            normalized["depends_on"] = [
+                str(value)[:160]
+                for value in item.get("depends_on", [])
+                if isinstance(value, str) and value.strip() and str(value).strip() != normalized["id"]
+            ][:128]
             merged[normalized["id"]] = normalized
     return merged
 
@@ -102,5 +107,21 @@ def public_owner(capability: dict[str, Any] | None) -> dict[str, Any] | None:
         "id": capability.get("id"),
         "kind": capability.get("kind"),
         "source": capability.get("source"),
+        "depends_on": capability.get("depends_on", []),
     }
     return {key: value for key, value in payload.items() if value is not None}
+
+
+def dependency_edges(registry: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    edges: list[dict[str, Any]] = []
+    for capability_id, capability in registry.items():
+        for dependency in capability.get("depends_on", []):
+            if not isinstance(dependency, str) or not dependency:
+                continue
+            edges.append({
+                "capability": capability_id,
+                "depends_on": dependency,
+                "resolved": dependency in registry,
+            })
+    edges.sort(key=lambda item: (item["capability"], item["depends_on"]))
+    return edges

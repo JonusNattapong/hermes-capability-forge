@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .registry import load_registry, owner_for_tool, public_owner
+from .registry import dependency_edges, load_registry, owner_for_tool, public_owner
 from .storage import _hermes_home, default_events_path, utc_now_iso
 
 
@@ -248,6 +248,7 @@ def build_report(
             "id": capability_id,
             "kind": capability_meta[capability_id].get("kind"),
             "source": capability_meta[capability_id].get("source"),
+            "depends_on": capability_meta[capability_id].get("depends_on", []),
             "calls": calls,
             "successes": bucket["successes"],
             "errors": bucket["errors"],
@@ -325,6 +326,7 @@ def build_report(
         },
         "candidates": candidates,
         "capabilities": capabilities,
+        "dependency_edges": dependency_edges(registry),
         "tools": tools,
         "skill_usage": skill_usage[:50],
         "policy": {

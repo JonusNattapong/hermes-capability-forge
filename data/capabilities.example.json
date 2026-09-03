@@ -7,15 +7,17 @@
       "source": "JonusNattapong/repo-inspector",
       "tools": ["repo_scan", "repo_dependency_graph"],
       "tool_prefixes": [],
-      "skills": ["repo-inspector"]
+      "skills": ["repo-inspector"],
+      "depends_on": ["codegraph-mcp"]
     },
     {
-      "id": "github-mcp",
+      "id": "codegraph-mcp",
       "kind": "mcp",
-      "source": "example/github-mcp",
+      "source": "example/codegraph-mcp",
       "tools": [],
-      "tool_prefixes": ["github_"],
-      "skills": []
+      "tool_prefixes": ["codegraph_"],
+      "skills": [],
+      "depends_on": []
     }
   ]
 }

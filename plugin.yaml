@@ -1,6 +1,6 @@
 name: capability-observer
-version: 0.3.0
-description: Privacy-preserving capability telemetry, ownership, eval gates, drift checks, and guarded repair for Hermes
+version: 0.4.0
+description: Privacy-preserving capability telemetry, ownership, eval gates, drift checks, guarded repair, and isolated experiments for Hermes
 provides_hooks:
   - post_tool_call
 author: JonusNattapong

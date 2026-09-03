@@ -5,7 +5,7 @@ description: >
   capability telemetry and Hermes skill usage, identify repeated failures or high-use
   friction, perform bounded research only for justified candidates, and produce
   conservative patch/retire/keep proposals. Do not mutate capabilities automatically.
-version: 0.3.0
+version: 0.4.0
 author: JonusNattapong
 license: MIT
 metadata:
@@ -50,6 +50,7 @@ Default mode is **proposal-first**.
 - Scheduled runs do not patch, delete, archive, replace, install, publish, or record new baselines automatically.
 - Do not change Hermes core.
 - Treat unresolved tool ownership as a request to improve the registry, not permission to guess.
+- Inspect explicit dependency edges before attributing a failure to the top-level capability.
 - Require a passing capability eval gate before recommending promotion of a change.
 - If a baseline exists, flag regressions before proposing KEEP or promotion.
 - Do not treat missing telemetry as proof that a capability is unused.
@@ -98,7 +99,10 @@ For each serious candidate, determine which surface owns the behavior:
 5. Hermes built-in behavior
 
 Inspect the current implementation and configuration before suggesting replacement.
-Prefer a targeted patch over creating a near-duplicate capability.
+Check `report.dependency_edges` for explicit upstream capability dependencies. A failure
+in a dependency may explain a healthy owner's symptoms; do not patch the owner until
+that possibility is ruled out. Prefer a targeted patch over creating a near-duplicate
+capability.
 
 ### 4. Use Hermes skill usage carefully
 
@@ -233,11 +237,14 @@ If a persisted JSON report was created, include its path.
 ## After approval
 
 When a user explicitly approves a PATCH proposal, hand the work back to
-`capability-forge` so the normal loop applies:
+`capability-forge`. For repo-backed changes, prefer an isolated
+`capability_forge_experiment` so the normal loop becomes:
 
-**BUILD -> VERIFY -> DOGFOOD -> LEARN -> IMPROVE**
+**CREATE EXPERIMENT -> PATCH -> ISOLATED EVAL -> DOGFOOD -> DECIDE -> SNAPSHOT / ROLLBACK**
 
-A weekly report is not success. A verified improvement during real work is success.
+Scheduled Maintainer runs must never create, patch, snapshot, clean up, or otherwise
+mutate experiments themselves. A weekly report is not success. A verified improvement
+during real work is success.
 
 ## Interaction with Hermes Curator
 

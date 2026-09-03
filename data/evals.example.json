@@ -13,7 +13,14 @@
         "max_retry_rate_increase": 0.03,
         "max_p95_duration_ms_relative_increase": 0.50,
         "max_success_rate_drop": 0.05
-      }
+      },
+      "checks": [
+        {
+          "name": "unit-tests",
+          "argv": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+          "timeout_seconds": 120
+        }
+      ]
     }
   }
 }

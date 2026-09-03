@@ -80,3 +80,40 @@ CAPABILITY_FORGE_PATCH = {
         "additionalProperties": False,
     },
 }
+
+CAPABILITY_FORGE_EXPERIMENT = {
+    "name": "capability_forge_experiment",
+    "description": (
+        "Run an isolated Git worktree capability experiment. Create a branch/worktree, apply exact-text "
+        "patches inside it, execute deterministic eval checks, record dogfood outcome, decide promotion "
+        "or rollback, and clean up without touching the source branch."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["create", "patch", "evaluate", "dogfood", "decide", "snapshot", "status", "cleanup"],
+                "default": "status",
+            },
+            "experiment_id": {"type": "string", "pattern": "^[a-fA-F0-9]{12}$"},
+            "repo_path": {"type": "string"},
+            "capability_id": {"type": "string", "maxLength": 160},
+            "hypothesis": {"type": "string", "maxLength": 2000},
+            "base_ref": {"type": "string", "maxLength": 200, "default": "HEAD"},
+            "relative_path": {"type": "string", "maxLength": 500},
+            "expected_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+            "old_text": {"type": "string"},
+            "new_text": {"type": "string"},
+            "reason": {"type": "string", "maxLength": 500},
+            "outcome": {"type": "string", "enum": ["better", "same", "worse", "unclear"]},
+            "evidence": {
+                "type": "string",
+                "maxLength": 2000,
+                "description": "Dogfood evidence used only to derive a hash/length; raw text is not persisted.",
+            },
+            "delete_branch": {"type": "boolean", "default": False},
+        },
+        "additionalProperties": False,
+    },
+}

@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import logging
 
+from .experiments import handle_experiment
 from .gates import handle_gate
 from .maintainer import handle_report
 from .observer import observe_tool_call
 from .patcher import handle_patch
-from .schemas import CAPABILITY_FORGE_GATE, CAPABILITY_FORGE_PATCH, CAPABILITY_FORGE_REPORT
+from .schemas import (
+    CAPABILITY_FORGE_EXPERIMENT,
+    CAPABILITY_FORGE_GATE,
+    CAPABILITY_FORGE_PATCH,
+    CAPABILITY_FORGE_REPORT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,4 +58,10 @@ def register(ctx) -> None:
         toolset="capability_forge",
         schema=CAPABILITY_FORGE_PATCH,
         handler=handle_patch,
+    )
+    ctx.register_tool(
+        name="capability_forge_experiment",
+        toolset="capability_forge",
+        schema=CAPABILITY_FORGE_EXPERIMENT,
+        handler=handle_experiment,
     )
