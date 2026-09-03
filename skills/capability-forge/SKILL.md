@@ -7,7 +7,7 @@ description: >
   MCP server. Research existing solutions lightly before building, prefer reuse
   and patching over creating new components, verify changes, dogfood them on the
   current real task, and preserve useful lessons for future runs.
-version: 0.2.0
+version: 0.3.0
 metadata:
   hermes:
     tags:
@@ -194,15 +194,57 @@ When real usage reveals a reusable lesson:
 
 Prefer targeted patches. Do not encode one-off accidents as permanent rules.
 
-## 10. Promotion, maintenance, and retirement
+## 10. Register ownership and evals
 
-Promote a prototype only after successful representative use and known failure
-modes are handled or documented. Periodically review active capabilities for
-upstream changes, recurring failures, broken references, usage, and overlap.
+When a capability becomes reusable, add it to the explicit capability registry at
+`~/.hermes/capability-lab/capabilities.json` (or `CAPABILITY_FORGE_REGISTRY`).
+Record its stable id, kind, source, exact tool names or narrow tool prefixes, and
+related skills. Never guess ownership from a vague name when multiple components
+could match.
 
-Research maintenance changes only when an active capability has evidence of
-upstream drift, repeated failure, or stale references. Avoid churn simply because
-a newer version exists.
+Create a capability-specific eval profile in
+`~/.hermes/capability-lab/evals.json` (or `CAPABILITY_FORGE_EVALS`) before treating
+telemetry as a promotion gate. Define observable thresholds such as minimum calls,
+maximum error/retry/unknown rates, latency, success rate, and drift tolerances.
+
+## 11. Promotion gate and baseline
+
+Before promoting a changed capability:
+
+1. dogfood it on representative real work
+2. call `capability_forge_gate(action="evaluate", capability_id=...)`
+3. require `PASS`; `NO_PROFILE` and `INSUFFICIENT_EVIDENCE` are not passes
+4. compare against the prior baseline when one exists
+5. investigate any `REGRESSION`
+6. after a trusted passing window, record the baseline with
+   `capability_forge_gate(action="record_baseline", capability_id=...)`
+
+Do not lower eval thresholds merely to make a failing change pass.
+
+## 12. Guarded repair
+
+`capability_forge_patch` is optional and must remain disabled unless the user has
+explicitly configured `CAPABILITY_FORGE_PATCH_ROOTS` and set
+`CAPABILITY_FORGE_ALLOW_PATCH=1`.
+
+Use it only for a narrow exact-text repair after evidence and an eval plan exist:
+
+1. obtain the current SHA-256
+2. `preview` the exact one-match replacement
+3. verify the target capability and expected effect
+4. `apply` only in an interactive/foreground workflow with explicit patch policy
+5. run tests and dogfood
+6. run the promotion gate
+7. `rollback` by patch id if validation regresses or the target changed unexpectedly
+
+Scheduled maintainer runs must stay proposal-first and must not apply patches.
+
+## 13. Maintenance and retirement
+
+Periodically review active capabilities for upstream changes, recurring failures,
+broken references, usage, overlap, and baseline drift. Research maintenance changes
+only when active evidence justifies it. Avoid churn simply because a newer version
+exists.
 
 Archive or consolidate capabilities that are superseded, unused, duplicated,
 dependent on abandoned software, or consistently more complex than valuable.

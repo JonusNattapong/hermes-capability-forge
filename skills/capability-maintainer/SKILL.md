@@ -5,7 +5,7 @@ description: >
   capability telemetry and Hermes skill usage, identify repeated failures or high-use
   friction, perform bounded research only for justified candidates, and produce
   conservative patch/retire/keep proposals. Do not mutate capabilities automatically.
-version: 0.2.0
+version: 0.3.0
 author: JonusNattapong
 license: MIT
 metadata:
@@ -24,6 +24,7 @@ metadata:
       - capability-forge
     requires_tools:
       - capability_forge_report
+      - capability_forge_gate
     blueprint:
       schedule: "every 7d"
       prompt: >
@@ -46,8 +47,11 @@ and decides what deserves attention next.
 
 Default mode is **proposal-first**.
 
-- Do not automatically patch, delete, archive, replace, install, or publish capabilities.
+- Scheduled runs do not patch, delete, archive, replace, install, publish, or record new baselines automatically.
 - Do not change Hermes core.
+- Treat unresolved tool ownership as a request to improve the registry, not permission to guess.
+- Require a passing capability eval gate before recommending promotion of a change.
+- If a baseline exists, flag regressions before proposing KEEP or promotion.
 - Do not treat missing telemetry as proof that a capability is unused.
 - Do not research every installed capability on every run.
 - Do not persist prompts, tool arguments, tool results, secrets, URLs, commands, or file contents.
@@ -55,7 +59,7 @@ Default mode is **proposal-first**.
 
 ## Weekly loop
 
-**REPORT -> TRIAGE -> INSPECT -> RESEARCH IF JUSTIFIED -> PROPOSE -> VERIFY PLAN**
+**REPORT -> MAP OWNER -> TRIAGE -> INSPECT -> RESEARCH IF JUSTIFIED -> GATE -> PROPOSE -> VERIFY PLAN**
 
 ### 1. Generate evidence
 
@@ -65,7 +69,7 @@ Call `capability_forge_report` with:
 {"days": 7, "write_report": true}
 ```
 
-Start from `report.candidates`.
+Start from `report.candidates`. Prefer capability-level candidates whose `owner.id` is explicit. For unresolved tool-level candidates, improve or request the ownership registry before attributing a root cause.
 
 If `candidate_count` is zero, do not invent maintenance work. Summarize that no
 candidate crossed the current evidence thresholds and stop unless another concrete
@@ -130,7 +134,25 @@ Stop once there is enough evidence to decide.
 
 Do not research healthy low-change capabilities merely because seven days passed.
 
-### 6. Choose a proposal
+### 6. Run the capability gate when possible
+
+For a candidate with explicit ownership and an eval profile, call:
+
+```json
+{"action":"evaluate","capability_id":"<owner.id>","days":7}
+```
+
+Interpret results conservatively:
+
+- `PASS`: current observed window meets the configured thresholds.
+- `FAIL`: do not recommend promotion; identify the failed checks.
+- `INSUFFICIENT_EVIDENCE`: collect more representative use before deciding.
+- `NO_PROFILE`: propose an eval profile before calling the capability verified.
+- `drift.status = REGRESSION`: flag the regression even if absolute thresholds still pass.
+
+Do not record a new baseline from a scheduled maintenance run.
+
+### 7. Choose a proposal
 
 Every candidate should end in one of these states:
 
@@ -163,7 +185,7 @@ Use only when there is evidence of duplication, supersession, abandonment, or ne
 
 Prefer Hermes Curator/archive mechanisms where they apply. Do not auto-delete.
 
-### 7. Prevent capability churn
+### 8. Prevent capability churn
 
 Reject proposals that only:
 
@@ -174,14 +196,14 @@ Reject proposals that only:
 - create another scheduler instead of using Hermes cron/blueprints
 - add broad permissions for convenience
 
-### 8. Produce the maintenance report
+### 9. Produce the maintenance report
 
 Return a compact report with:
 
 ```text
 Capability Maintenance
 Window: 7 days
-Evidence: <event count> events / <tool count> tools
+Evidence: <event count> events / <tool count> tools / <capability count> mapped capabilities
 
 KEEP
 - ...
@@ -191,6 +213,8 @@ PATCH
   evidence: ...
   change: ...
   verification: ...
+  gate: PASS | FAIL | INSUFFICIENT_EVIDENCE | NO_PROFILE
+  drift: STABLE | REGRESSION | NO_BASELINE | NO_DRIFT_PROFILE
 
 INVESTIGATE
 - ...

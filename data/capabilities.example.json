@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "id": "repo-inspector",
+      "kind": "skill+plugin",
+      "source": "JonusNattapong/repo-inspector",
+      "tools": ["repo_scan", "repo_dependency_graph"],
+      "tool_prefixes": [],
+      "skills": ["repo-inspector"]
+    },
+    {
+      "id": "github-mcp",
+      "kind": "mcp",
+      "source": "example/github-mcp",
+      "tools": [],
+      "tool_prefixes": ["github_"],
+      "skills": []
+    }
+  ]
+}

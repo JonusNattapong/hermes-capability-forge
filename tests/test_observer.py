@@ -51,8 +51,11 @@ class CapabilityObserverTests(unittest.TestCase):
         ctx = FakeContext()
         plugin.register(ctx)
         self.assertIn("post_tool_call", ctx.hooks)
-        self.assertIn("capability_forge_report", ctx.tools)
-        self.assertEqual(ctx.tools["capability_forge_report"]["toolset"], "capability_forge")
+        self.assertEqual(
+            set(ctx.tools),
+            {"capability_forge_report", "capability_forge_gate", "capability_forge_patch"},
+        )
+        self.assertTrue(all(tool["toolset"] == "capability_forge" for tool in ctx.tools.values()))
 
     def test_records_metadata_without_sensitive_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:

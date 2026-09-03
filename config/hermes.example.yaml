@@ -19,3 +19,18 @@ curator:
   archive_after_days: 90
   consolidate: false
   prune_builtins: false
+
+# V0.3 runtime state lives under ~/.hermes/capability-lab/ by default:
+#   capabilities.json  explicit tool -> capability ownership
+#   evals.json         promotion thresholds
+#   baselines.json     trusted passing baselines
+#   patches/           reversible guarded-patch backups/manifests
+#
+# Optional environment overrides:
+#   CAPABILITY_FORGE_REGISTRY=/path/to/capabilities.json
+#   CAPABILITY_FORGE_EVALS=/path/to/evals.json
+#   CAPABILITY_FORGE_BASELINES=/path/to/baselines.json
+#
+# Guarded patching is intentionally NOT enabled here. Configure it explicitly:
+#   CAPABILITY_FORGE_PATCH_ROOTS=/narrow/root1${PATH_SEPARATOR}/narrow/root2
+#   CAPABILITY_FORGE_ALLOW_PATCH=1   # foreground opt-in only

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from .registry import load_registry, owner_for_tool, public_owner
 from .storage import _hermes_home, default_events_path, utc_now_iso
 
 
@@ -21,6 +22,13 @@ def _parse_timestamp(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _percentile(values: list[int], quantile: float) -> int | None:
@@ -103,10 +111,12 @@ def build_report(
     now: datetime | None = None,
     events_path: Path | None = None,
     usage_path: Path | None = None,
+    registry_path: Path | None = None,
 ) -> dict[str, Any]:
     days = max(1, min(int(days), 90))
     reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     since = reference - timedelta(days=days)
+    registry = load_registry(registry_path)
 
     grouped: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
@@ -168,8 +178,10 @@ def build_report(
     for tool_name, bucket in grouped.items():
         calls = bucket["calls"]
         errors = bucket["errors"]
+        owner = owner_for_tool(tool_name, registry)
         summary = {
             "tool": tool_name,
+            "owner": public_owner(owner),
             "calls": calls,
             "successes": bucket["successes"],
             "errors": errors,
@@ -182,12 +194,13 @@ def build_report(
             "error_classes": dict(sorted(bucket["error_classes"].items(), key=lambda item: (-item[1], item[0]))[:5]),
         }
         tools.append(summary)
-        reason, priority = (None, 0) if tool_name == "capability_forge_report" else _candidate_reason(summary)
-        if reason:
+        reason, priority = (None, 0) if tool_name.startswith("capability_forge_") else _candidate_reason(summary)
+        if reason and owner is None:
             candidates.append(
                 {
                     "kind": "tool",
                     "name": tool_name,
+                    "owner": None,
                     "reason": reason,
                     "priority": priority,
                     "calls": calls,
@@ -199,14 +212,88 @@ def build_report(
             )
 
     tools.sort(key=lambda item: (-item["calls"], item["tool"]))
+
+    capability_buckets: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "calls": 0,
+            "successes": 0,
+            "errors": 0,
+            "blocked": 0,
+            "unknown": 0,
+            "retries": 0,
+            "durations": [],
+            "tools": [],
+            "error_classes": defaultdict(int),
+        }
+    )
+    capability_meta: dict[str, dict[str, Any]] = {}
+    for tool in tools:
+        owner = tool.get("owner")
+        if not isinstance(owner, dict) or not isinstance(owner.get("id"), str):
+            continue
+        capability_id = owner["id"]
+        capability_meta[capability_id] = owner
+        bucket = capability_buckets[capability_id]
+        for key in ("calls", "successes", "errors", "blocked", "unknown", "retries"):
+            bucket[key] += int(tool.get(key) or 0)
+        bucket["durations"].extend(grouped[tool["tool"]]["durations"])
+        bucket["tools"].append(tool["tool"])
+        for error_class, count in tool.get("error_classes", {}).items():
+            bucket["error_classes"][error_class] += int(count)
+
+    capabilities: list[dict[str, Any]] = []
+    for capability_id, bucket in capability_buckets.items():
+        calls = bucket["calls"]
+        summary = {
+            "id": capability_id,
+            "kind": capability_meta[capability_id].get("kind"),
+            "source": capability_meta[capability_id].get("source"),
+            "calls": calls,
+            "successes": bucket["successes"],
+            "errors": bucket["errors"],
+            "blocked": bucket["blocked"],
+            "unknown": bucket["unknown"],
+            "retries": bucket["retries"],
+            "success_rate": round(bucket["successes"] / calls, 4) if calls else 0.0,
+            "error_rate": round(bucket["errors"] / calls, 4) if calls else 0.0,
+            "retry_rate": round(bucket["retries"] / calls, 4) if calls else 0.0,
+            "unknown_rate": round(bucket["unknown"] / calls, 4) if calls else 0.0,
+            "p50_duration_ms": _percentile(bucket["durations"], 0.50),
+            "p95_duration_ms": _percentile(bucket["durations"], 0.95),
+            "tools": sorted(bucket["tools"]),
+            "error_classes": dict(sorted(bucket["error_classes"].items(), key=lambda item: (-item[1], item[0]))[:5]),
+        }
+        capabilities.append(summary)
+        reason, priority = (None, 0) if capability_id == "hermes-capability-forge" else _candidate_reason(summary)
+        if reason:
+            candidates.append(
+                {
+                    "kind": "capability",
+                    "name": capability_id,
+                    "owner": {
+                        "id": capability_id,
+                        "kind": summary.get("kind"),
+                        "source": summary.get("source"),
+                    },
+                    "reason": reason,
+                    "priority": priority,
+                    "calls": calls,
+                    "errors": summary["errors"],
+                    "retries": summary["retries"],
+                    "error_rate": summary["error_rate"],
+                    "p95_duration_ms": summary["p95_duration_ms"],
+                }
+            )
+
+    capabilities.sort(key=lambda item: (-item["calls"], item["id"]))
     candidates.sort(key=lambda item: (-item["priority"], item["name"]))
 
     usage = read_skill_usage(usage_path)
     skill_usage: list[dict[str, Any]] = []
     for name, stats in usage.items():
-        uses = int(stats.get("use_count") or 0)
-        views = int(stats.get("view_count") or 0)
-        patches = int(stats.get("patch_count") or 0)
+        uses = _safe_int(stats.get("use_count") or 0)
+        views = _safe_int(stats.get("view_count") or 0)
+        patches = _safe_int(stats.get("patch_count") or 0)
         skill_usage.append(
             {
                 "skill": name,
@@ -222,7 +309,7 @@ def build_report(
     skill_usage.sort(key=lambda item: (-(item["use_count"] + item["view_count"]), item["skill"]))
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "generated_at": utc_now_iso(),
         "window": {
             "days": days,
@@ -233,15 +320,19 @@ def build_report(
             "events": total_events,
             "tools_observed": len(tools),
             "candidate_count": len(candidates),
+            "capabilities_observed": len(capabilities),
             "skills_with_usage": len(skill_usage),
         },
         "candidates": candidates,
+        "capabilities": capabilities,
         "tools": tools,
         "skill_usage": skill_usage[:50],
         "policy": {
             "maintenance_mode": "proposal_first",
             "research_only_candidates": True,
             "auto_mutation": False,
+            "ownership": "explicit_registry_only",
+            "promotion_requires_eval_gate": True,
         },
     }
 

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "id": "hermes-capability-forge",
+      "kind": "plugin",
+      "source": "JonusNattapong/hermes-capability-forge",
+      "tools": [
+        "capability_forge_report",
+        "capability_forge_gate",
+        "capability_forge_patch"
+      ],
+      "skills": [
+        "capability-forge",
+        "capability-maintainer"
+      ]
+    }
+  ]
+}

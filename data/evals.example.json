@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "capabilities": {
+    "example-capability": {
+      "min_calls": 20,
+      "max_error_rate": 0.10,
+      "max_retry_rate": 0.05,
+      "max_unknown_rate": 0.10,
+      "max_p95_duration_ms": 5000,
+      "min_success_rate": 0.85,
+      "drift": {
+        "max_error_rate_increase": 0.05,
+        "max_retry_rate_increase": 0.03,
+        "max_p95_duration_ms_relative_increase": 0.50,
+        "max_success_rate_drop": 0.05
+      }
+    }
+  }
+}
