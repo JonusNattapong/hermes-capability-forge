@@ -568,6 +568,12 @@ def snapshot_experiment(experiment_id: str) -> dict[str, Any]:
                 "expected_sha256": expected_hash,
             }
 
+    # Eval commands run inside the experiment worktree and are trusted executable
+    # configuration, so they may have touched the Git index. Clear staged state first
+    # without discarding working-tree files, then stage only Forge-owned patch paths.
+    reset = _run_git(worktree, ["reset", "--mixed", "HEAD", "--"])
+    if reset.returncode != 0:
+        return {"success": False, "error": "git_index_reset_failed", "stderr": reset.stderr[-2000:]}
     added = _run_git(worktree, ["add", "--", *patch_paths])
     if added.returncode != 0:
         return {"success": False, "error": "git_add_failed", "stderr": added.stderr[-2000:]}

@@ -156,6 +156,7 @@ class CapabilityForgeV04Tests(unittest.TestCase):
         self.assertEqual(blocked_cleanup["error"], "promote_requires_snapshot_before_cleanup")
 
         (worktree / "eval-artifact.tmp").write_text("must-not-be-committed", encoding="utf-8")
+        self.assertEqual(git(worktree, "add", "eval-artifact.tmp").returncode, 0)
         snapshot = experiments.snapshot_experiment(exp["experiment_id"])
         self.assertTrue(snapshot["success"], snapshot)
         snapshot_commit = snapshot["snapshot"]["commit"]
@@ -314,6 +315,36 @@ class CapabilityForgeV04Tests(unittest.TestCase):
         cleanup = experiments.cleanup_experiment(experiment_id, delete_branch=True)
         self.assertFalse(cleanup["success"])
         self.assertEqual(cleanup["error"], "experiment_manifest_identity_mismatch")
+
+
+    def test_snapshot_commits_only_forge_owned_patch_paths(self):
+        self._write_eval()
+        experiments, exp = self._create("snapshot ignores unrelated staged files")
+        worktree = self._patch(experiments, exp)
+
+        evaluated = experiments.evaluate_experiment(exp["experiment_id"])
+        self.assertEqual(evaluated["evaluation"]["status"], "PASS")
+        experiments.record_dogfood(exp["experiment_id"], "better", "worked in real use")
+        decision = experiments.decide_experiment(exp["experiment_id"])
+        self.assertEqual(decision["decision"]["status"], "PROMOTE")
+
+        unrelated = worktree / "unrelated.txt"
+        unrelated.write_text("must not be committed\n", encoding="utf-8")
+        subprocess.run(["git", "add", "unrelated.txt"], cwd=worktree, check=True)
+
+        snapshot = experiments.snapshot_experiment(exp["experiment_id"])
+        self.assertTrue(snapshot["success"], snapshot)
+        commit = snapshot["snapshot"]["commit"]
+        changed = subprocess.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],
+            cwd=worktree,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        self.assertEqual(changed, ["app.txt"])
+
+        experiments.cleanup_experiment(exp["experiment_id"], delete_branch=False)
 
 
 if __name__ == "__main__":
