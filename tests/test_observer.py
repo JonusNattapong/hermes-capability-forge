@@ -32,9 +32,17 @@ def load_plugin_package():
 class FakeContext:
     def __init__(self):
         self.hooks = {}
+        self.tools = {}
 
     def register_hook(self, name, callback):
         self.hooks[name] = callback
+
+    def register_tool(self, *, name, toolset, schema, handler):
+        self.tools[name] = {
+            "toolset": toolset,
+            "schema": schema,
+            "handler": handler,
+        }
 
 
 class CapabilityObserverTests(unittest.TestCase):
@@ -43,6 +51,8 @@ class CapabilityObserverTests(unittest.TestCase):
         ctx = FakeContext()
         plugin.register(ctx)
         self.assertIn("post_tool_call", ctx.hooks)
+        self.assertIn("capability_forge_report", ctx.tools)
+        self.assertEqual(ctx.tools["capability_forge_report"]["toolset"], "capability_forge")
 
     def test_records_metadata_without_sensitive_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -95,8 +105,33 @@ class CapabilityObserverTests(unittest.TestCase):
                 path = Path(tmp) / "capability-lab" / "events.jsonl"
                 event = json.loads(path.read_text(encoding="utf-8").strip())
                 self.assertEqual(event["status"], "error")
+                self.assertEqual(event["error_class"], "returned_error")
                 self.assertNotIn("C:/secret.txt", json.dumps(event))
                 self.assertNotIn("not found", json.dumps(event))
+            finally:
+                if old_home is None:
+                    os.environ.pop("HERMES_HOME", None)
+                else:
+                    os.environ["HERMES_HOME"] = old_home
+
+    def test_json_success_envelope_is_classified_without_status_kwarg(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_home = os.environ.get("HERMES_HOME")
+            os.environ["HERMES_HOME"] = tmp
+            try:
+                plugin = load_plugin_package()
+                plugin._on_post_tool_call(
+                    tool_name="read_file",
+                    args={"path": "C:/private.txt"},
+                    result='{"success":true,"content":"private payload"}',
+                    task_id="task-2",
+                    duration_ms=4,
+                )
+                path = Path(tmp) / "capability-lab" / "events.jsonl"
+                event = json.loads(path.read_text(encoding="utf-8").strip())
+                self.assertEqual(event["status"], "success")
+                self.assertNotIn("private payload", json.dumps(event))
+                self.assertNotIn("C:/private.txt", json.dumps(event))
             finally:
                 if old_home is None:
                     os.environ.pop("HERMES_HOME", None)

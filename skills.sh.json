@@ -3,7 +3,7 @@
   "groupings": [
     {
       "title": "Capability Engineering",
-      "skills": ["capability-forge"]
+      "skills": ["capability-forge", "capability-maintainer"]
     }
   ]
 }

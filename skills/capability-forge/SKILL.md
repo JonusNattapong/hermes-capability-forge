@@ -7,7 +7,7 @@ description: >
   MCP server. Research existing solutions lightly before building, prefer reuse
   and patching over creating new components, verify changes, dogfood them on the
   current real task, and preserve useful lessons for future runs.
-version: 0.1.0
+version: 0.2.0
 metadata:
   hermes:
     tags:
@@ -19,6 +19,8 @@ metadata:
       - dogfood
       - engineering
     category: autonomous-ai-agents
+    related_skills:
+      - capability-maintainer
 ---
 
 # Capability Forge
@@ -34,6 +36,8 @@ work easier.
 **OBSERVE -> RESEARCH -> DECIDE -> BUILD -> VERIFY -> DOGFOOD -> LEARN -> IMPROVE**
 
 Do not interrupt ordinary work merely to invent infrastructure.
+
+When the `capability_forge_report` tool is available, use it before broad maintenance work or before creating a replacement for an unreliable existing capability. It provides sanitized evidence from real tool usage; treat missing telemetry as unknown, not proof of non-use.
 
 ## 1. Observe
 

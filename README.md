@@ -4,14 +4,15 @@ Continuous capability engineering for [NousResearch/hermes-agent](https://github
 
 Instead of installing more tools for the sake of having more tools, Capability Forge watches real work for repeated friction, performs bounded research, chooses the smallest useful extension surface, verifies it, then dogfoods it on the task that justified building it.
 
-## V0.1
+## V0.2
 
-This repository contains two cooperating components:
+This repository contains three cooperating components:
 
 1. **`capability-forge` Skill** — the decision and engineering loop for deciding whether to reuse, patch, or build a Skill, helper script, Hermes Plugin/Tool, or MCP server.
-2. **`capability-observer` Plugin** — a privacy-preserving `post_tool_call` observer that records only operational telemetry needed to evaluate real usage.
+2. **`capability-observer` Plugin** — a privacy-preserving `post_tool_call` observer that records only operational telemetry needed to evaluate real usage and exposes the deterministic `capability_forge_report` tool.
+3. **`capability-maintainer` Skill / Blueprint** — a weekly, proposal-first review that triages evidence, researches only justified candidates, and hands approved changes back to Forge for dogfooding.
 
-Hermes Curator remains responsible for its normal profile-local skill maintenance. Forge-created Git skills are intentionally versioned here and are not assumed to be auto-curated by Hermes.
+Hermes Curator remains responsible for its normal skill lifecycle. Forge adds cross-surface evidence for Skills, Plugin/Tools, MCPs, and other real-work friction without replacing Curator.
 
 ## Architecture
 
@@ -28,7 +29,6 @@ Hermes Curator remains responsible for its normal profile-local skill maintenanc
               |            |             |
               v            v             v
             Skill        Plugin          MCP
-          procedure    native logic   external API
               |            |             |
               +------------+-------------+
                            v
@@ -41,11 +41,22 @@ Hermes Curator remains responsible for its normal profile-local skill maintenanc
                  Capability Observer
                            |
                            v
-                ~/.hermes/capability-lab/
-                      events.jsonl
+              events.jsonl + skill usage
                            |
                            v
-                 evidence for patches
+              capability_forge_report
+                           |
+                           v
+              Capability Maintainer
+                (weekly blueprint)
+                           |
+                           v
+              KEEP / PATCH / INVESTIGATE /
+                 RETIRE proposals only
+                           |
+                     approved change
+                           |
+                           +----> Forge loop
 ```
 
 Core loop:
@@ -80,7 +91,7 @@ Requires a current Hermes Agent version with plugin hooks and GitHub skill insta
 hermes plugins install JonusNattapong/hermes-capability-forge --enable
 ```
 
-The plugin registers no model-visible tools. It only subscribes to `post_tool_call`, so it does not inflate the normal tool schema.
+The plugin subscribes to `post_tool_call` and registers one model-visible tool: `capability_forge_report`. The tool summarizes sanitized telemetry deterministically; it does not call an LLM or the web.
 
 ### 2. Install the Forge skill
 
@@ -97,7 +108,17 @@ hermes skills tap add JonusNattapong/hermes-capability-forge
 hermes skills search capability-forge --source JonusNattapong/hermes-capability-forge
 ```
 
-### 3. Optional: make new Forge skills Git-tracked
+### 3. Install the weekly maintainer blueprint
+
+```bash
+hermes skills install JonusNattapong/hermes-capability-forge/skills/capability-maintainer
+```
+
+The skill declares `every 7d` as a Hermes Blueprint. Installation should create a **suggested** cron job, not silently schedule it. Review it with `/suggestions` and accept it only when you want periodic maintenance.
+
+The maintainer is proposal-first: it can analyze and research justified candidates, but it does not auto-patch/delete capabilities.
+
+### 4. Optional: make new Forge skills Git-tracked
 
 Clone this repo somewhere permanent and set:
 
@@ -136,11 +157,19 @@ Use FastMCP when building a Python MCP server and mcporter when inspecting/calli
 
 ## Telemetry and privacy
 
-Observer writes to:
+Observer writes raw sanitized events to:
 
 ```text
 ~/.hermes/capability-lab/events.jsonl
 ```
+
+`capability_forge_report` can also persist sanitized maintenance snapshots to:
+
+```text
+~/.hermes/capability-lab/reports/capability-report-<timestamp>.json
+```
+
+Reports combine recent Observer events with Hermes `~/.hermes/skills/.usage.json` when available. Missing skill usage is treated as unknown, not proof of non-use.
 
 Each event may contain:
 
@@ -195,7 +224,7 @@ Hermes Curator has useful built-in usage telemetry, stale/archive transitions, b
 hermes curator run --dry-run
 ```
 
-Current Hermes behavior matters here: Curator's automatic management is scoped to skills it considers agent-created in the profile-local library, while hub-installed/external Git skills are not simply swept into the same lifecycle. This repo therefore treats Git history + Observer evidence as the source of truth for Forge-managed capabilities. A dedicated evidence-driven maintainer belongs in **V0.2**, after real telemetry exists.
+Current Hermes behavior matters here: Curator lifecycle rules depend on skill provenance and configuration, while hub-installed/manual/external skills are not all equivalent. Capability Maintainer therefore treats Hermes usage counters as supporting evidence, not a deletion oracle. V0.2 adds cross-surface maintenance proposals without replacing Curator or bypassing its recoverable lifecycle.
 
 ## Development
 
@@ -218,19 +247,28 @@ python -m unittest discover -s tests -v
 - [x] Tests
 - [x] FastMCP/mcporter reuse guidance
 
-### V0.2, only after telemetry exists
+### V0.2
 
-- [ ] Evidence summarizer
-- [ ] Repeated-friction detector
-- [ ] Weekly capability maintainer
-- [ ] Patch proposals from real failures/latency/retries
-- [ ] Lightweight eval cases for promoted capabilities
-- [ ] Upstream drift checks only for active capabilities
+- [x] Evidence summarizer (`capability_forge_report`)
+- [x] Repeated-failure / retry-loop / elevated-failure / latency / high-usage candidate detector
+- [x] Weekly Capability Maintainer Blueprint
+- [x] Proposal-first KEEP / PATCH / INVESTIGATE / RETIRE workflow
+- [x] Hermes skill usage merge when `.usage.json` is available
+- [x] Persisted sanitized maintenance reports
+- [x] Upstream research policy limited to justified active candidates
+- [x] Tests for report ranking, privacy, corrupted telemetry, and plugin registration
 
-### Explicitly not in V0.1
+### V0.3 candidates
+
+- [ ] Map tool failures to owning Skill/Plugin/MCP more precisely
+- [ ] Capability-specific eval registry and promotion gates
+- [ ] Optional guarded patch execution after explicit policy opt-in
+- [ ] Baseline/drift comparison across maintenance windows
+
+### Explicitly not in V0.2
 
 - autonomous internet-wide dependency scanning
-- auto-merging or auto-deleting skills
+- unattended auto-patching, auto-merging, or auto-deleting skills
 - recording prompts/results for analytics
 - modifying Hermes core
 - creating MCP wrappers for trivial CLI operations

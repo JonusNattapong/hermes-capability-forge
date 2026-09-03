@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 
+from .maintainer import handle_report
 from .observer import observe_tool_call
+from .schemas import CAPABILITY_FORGE_REPORT
 
 logger = logging.getLogger(__name__)
 
@@ -31,3 +33,9 @@ def _on_post_tool_call(
 
 def register(ctx) -> None:
     ctx.register_hook("post_tool_call", _on_post_tool_call)
+    ctx.register_tool(
+        name="capability_forge_report",
+        toolset="capability_forge",
+        schema=CAPABILITY_FORGE_REPORT,
+        handler=handle_report,
+    )
